@@ -1,186 +1,196 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import nltk
-from nltk.sentiment import SentimentIntensityAnalyzer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import NMF
 from sklearn.metrics import pairwise_distances
 from sklearn.manifold import MDS
-import matplotlib.pyplot as plt
+from nltk.sentiment import SentimentIntensityAnalyzer
 import plotly.express as px
 import plotly.graph_objects as go
 import networkx as nx
 from wordcloud import WordCloud
 from itertools import combinations
 
-nltk.download('vader_lexicon')
+# ---------------------------------------------
+# SAFE NLTK DOWNLOAD
+# ---------------------------------------------
+import nltk
+nltk.download("vader_lexicon", quiet=True)
 
+# ---------------------------------------------
+# STREAMLIT CONFIG
+# ---------------------------------------------
 st.set_page_config(page_title="Advanced Text Analysis App", layout="wide")
 st.title("Advanced Text Analysis App – Topics, Semantics, Sentiment, Wordclouds")
 
+# ---------------------------------------------
+# UPLOAD FILE
+# ---------------------------------------------
 uploaded = st.file_uploader("Upload dataset (Excel or CSV)", type=["xlsx", "xls", "csv"])
 
 if uploaded:
+    # Load file
     if uploaded.name.endswith("csv"):
         df = pd.read_csv(uploaded)
     else:
         df = pd.read_excel(uploaded)
 
+    # -----------------------------------------
+    # SIDEBAR INPUTS
+    # -----------------------------------------
     st.sidebar.header("Settings")
     text_col = st.sidebar.selectbox("Select text column", df.columns)
     model_col = st.sidebar.selectbox("Select model column", df.columns)
     region_col = st.sidebar.selectbox("Select user region column", df.columns)
 
-
+    # -----------------------------------------
+    # STOPWORDS (SAFE, EXTENDED)
+    # -----------------------------------------
     default_stop = {
-    # Core English stopwords (NLTK + SpaCy + scikit-learn)
-    "a","about","above","across","after","again","against","all","almost","alone","along","already",
-    "also","although","always","am","among","an","and","another","any","anybody","anyone","anything",
-    "anyway","anywhere","are","aren't","around","as","at","back","be","became","because","become",
-    "becomes","becoming","been","before","beforehand","behind","being","below","beside","besides",
-    "between","beyond","both","but","by","can","can't","cannot","could","couldn't","did","didn't","do",
-    "does","doesn't","doing","don't","done","down","during","each","either","else","elsewhere","enough",
-    "even","ever","every","everybody","everyone","everything","everywhere","except","few","fifteen",
-    "fifty","first","five","for","former","formerly","forty","four","from","further","had","hadn't",
-    "has","hasn't","have","haven't","having","he","he'd","he'll","he's","her","here","here's","hers",
-    "herself","him","himself","his","how","however","i","i'd","i'll","i'm","i've","if","in","indeed",
-    "instead","into","is","isn't","it","it's","its","itself","just","keep","keeps","kept","know",
-    "known","knows","last","least","less","let","let's","like","likely","long","made","make","makes",
-    "many","may","maybe","me","might","mightn't","mine","more","most","mostly","much","must","mustn't",
-    "my","myself","neither","never","nevertheless","new","next","nine","no","nobody","none","nor","not",
-    "nothing","now","nowhere","of","off","often","on","once","one","only","onto","or","other","others",
-    "otherwise","our","ours","ourselves","out","over","own","part","per","perhaps","please","put",
-    "rather","really","said","same","say","says","second","see","seem","seemed","seeming","seems",
-    "several","she","she'd","she'll","she's","should","shouldn't","since","six","so","some","somebody",
-    "someone","something","sometimes","somewhere","still","such","taking","ten","than","that","that's",
-    "the","their","theirs","them","themselves","then","there","there's","therefore","these","they",
-    "they'd","they'll","they're","they've","thing","things","think","third","this","those","though",
-    "three","through","throughout","to","together","too","toward","towards","try","trying","twenty",
-    "two","under","until","up","upon","us","use","used","using","usually","very","via","was","wasn't",
-    "we","we'd","we'll","we're","we've","well","were","weren't","what","what's","whatever","when",
-    "when's","whenever","where","where's","whether","which","while","who","who's","whoever","whole",
-    "whom","why","why's","will","with","within","without","won't","would","wouldn't","yes","yet","you",
-    "you'd","you'll","you're","you've","your","yours","yourself","yourselves",
+        "a","about","above","across","after","again","against","all","almost","alone","along","already",
+        "also","although","always","am","among","an","and","another","any","anybody","anyone","anything",
+        "anyway","anywhere","are","around","as","at","back","be","became","because","become","becomes",
+        "becoming","been","before","beforehand","behind","being","below","beside","besides","between",
+        "beyond","both","but","by","can","cannot","could","did","do","does","doing","done","down","during",
+        "each","either","else","elsewhere","enough","even","ever","every","everybody","everyone",
+        "everything","everywhere","except","few","fifteen","fifty","first","five","for","former",
+        "formerly","forty","four","from","further","had","has","have","having","he","her","here","hers",
+        "herself","him","himself","his","how","however","i","if","in","indeed","instead","into","is","it",
+        "its","itself","just","keep","keeps","kept","know","known","knows","last","least","less","let",
+        "likely","long","made","make","makes","many","may","maybe","me","might","mine","more","most",
+        "mostly","much","must","my","myself","neither","never","nevertheless","new","next","nine","no",
+        "nobody","none","nor","not","nothing","now","nowhere","of","off","often","on","once","one","only",
+        "onto","or","other","others","otherwise","our","ours","ourselves","out","over","own","part","per",
+        "perhaps","put","rather","really","said","same","say","second","see","seem","seemed","seeming",
+        "seems","several","she","should","since","six","so","some","somebody","someone","something",
+        "sometimes","somewhere","still","such","taking","ten","than","that","the","their","theirs","them",
+        "themselves","then","there","therefore","these","they","thing","things","third","this","those",
+        "though","three","through","throughout","to","together","too","toward","try","trying","twenty",
+        "two","under","until","up","upon","us","use","used","usually","very","via","was","we","well","were",
+        "what","whatever","when","whenever","where","whether","which","while","who","whoever","whole",
+        "whom","why","will","with","within","without","would","yes","yet","you","your","yours","yourself",
+        "yourselves",
 
-    # Conversational fillers (common in student texts & AI models)
-    "uh","um","hmm","ok","okay","yeah","yep","right","well","basically","literally","actually",
-    "kinda","sorta","maybe","perhaps","guess","like","just","really","quite","thing","things",
+        # Conversational filler
+        "uh","um","hmm","ok","okay","yeah","yep","right","well","basically","literally","actually",
+        "kinda","sorta","maybe","guess","just","really","quite",
 
-    # AI-text filler words that hurt topic modeling
-    "however","therefore","overall","additionally","moreover","furthermore","importantly",
-    "significantly","interesting","notably","essentially","generally","typically","commonly",
-    "broadly","context","contextual","aspect","aspects","factor","factors","issue","issues",
-    "topic","topics","example","examples","point","points","situation","situations",
-
-    # Punctuation tokens / artifacts
-    ".",",",";","!","?","-","_","(",")","[","]","{","}","'","\"","…”","“","”","’","…",
-
-    # Common verbs that usually do not define topics
-    "be","have","do","did","does","done","make","get","got","give","take","see","seen","go","went",
-    "feel","felt","know","think","say","said","use","used",
-
-    # Academic filler (common in student answers)
-    "analysis","study","studies","student","students","research","paper","text","section","paragraph",
-    "author","authors","article","information","data","discuss","discusses","explain","explains",
-    "describe","describes","states","argues","shows","suggests"
+        # Academic filler
+        "analysis","study","studies","research","paper","text","section","paragraph","author","authors"
     }
-    sociological_stop = {
-    "people", "think", "say", "study", "student", "analysis", "text", "use", "like"
-    }
-    
+
+    sociological_stop = {"people","think","say","study","student","analysis","text","use","like"}
+
     custom_stop = st.sidebar.text_area("Add custom stopwords (comma-separated)")
     custom_stop = set(w.strip().lower() for w in custom_stop.split(",") if w.strip())
-    
-    stopwords_final = default_stop.union(sociological_stop).union(custom_stop)
-    stopwords_final = sorted(list(stopwords_final))
 
-    n_topics = st.sidebar.slider("Number of topics", 3, 20, 5)
+    stopwords_final = sorted(default_stop.union(sociological_stop).union(custom_stop))
+
+    # -----------------------------------------
+    # TOPIC MODELING INPUTS
+    # -----------------------------------------
+    n_topics = st.sidebar.slider("Number of topics", 3, 20, 6)
     min_df = st.sidebar.slider("Min document frequency", 1, 10, 2)
-    max_df = st.sidebar.slider("Max document frequency (fraction)", 0.1, 1.0, 0.9)
+    max_df = st.sidebar.slider("Max document frequency", 0.1, 1.0, 0.9)
 
     tabs = st.tabs([
-        "Topic Modeling", "Topic Distance Map", "Semantic Network", "Sentiment",
-        "Wordclouds", "Region × Model Analysis"])
+        "Topic Modeling", "Topic Distance Map", "Semantic Network",
+        "Sentiment", "Wordclouds", "Region × Model Analysis"
+    ])
 
+    # -----------------------------------------
+    # CLEAN TEXT
+    # -----------------------------------------
     df = df.dropna(subset=[text_col])
     docs = df[text_col].astype(str).tolist()
 
-    tfidf = TfidfVectorizer(stop_words=stopwords_final, max_features=7000,
-                            min_df=min_df, max_df=max_df, ngram_range=(1, 2))
+    # -----------------------------------------
+    # TF-IDF
+    # -----------------------------------------
+    tfidf = TfidfVectorizer(
+        stop_words=stopwords_final,
+        max_features=6000,
+        min_df=min_df,
+        max_df=max_df,
+        ngram_range=(1, 2)
+    )
     X = tfidf.fit_transform(docs)
     feature_names = tfidf.get_feature_names_out()
 
+    # -----------------------------------------
+    # NMF TOPIC MODEL
+    # -----------------------------------------
     nmf = NMF(n_components=n_topics, random_state=42)
     W = nmf.fit_transform(X)
     H = nmf.components_
-    df['topic'] = W.argmax(axis=1)
+    df["topic"] = W.argmax(axis=1)
 
-    def label_topic(topic_idx):
-        top_idx = H[topic_idx].argsort()[-5:][::-1]
-        return ", ".join([feature_names[i] for i in top_idx])
+    def label_topic(t):
+        top_idx = H[t].argsort()[-6:][::-1]
+        return ", ".join(feature_names[i] for i in top_idx)
 
-    ###########################
-    # TAB 1: TOPIC MODELING
-    ###########################
+    # -----------------------------------------
+    # TAB 1 — TOPIC MODELING
+    # -----------------------------------------
     with tabs[0]:
         st.header("Topic Modeling (NMF)")
-        st.write("This section shows the extracted topics and their most important terms. Higher weights indicate terms that define the topic.")
 
         topic_labels = [label_topic(i) for i in range(n_topics)]
-        st.subheader("Top Terms per Topic")
-        st.dataframe(pd.DataFrame({"Topic": range(n_topics), "Top Terms": topic_labels}), use_container_width=True)
+        st.dataframe(
+            pd.DataFrame({"Topic": list(range(n_topics)), "Top Terms": topic_labels}),
+            use_container_width=True
+        )
 
-        st.write("Interpretation: Each topic is a cluster of words frequently appearing together. Students should read the top terms to understand the theme.")
-
-        st.subheader("Topic Distribution by User Region")
-        fig = px.histogram(df, x='topic', color=region_col, barmode='group',
-                           color_discrete_sequence=px.colors.qualitative.Safe)
+        fig = px.histogram(df, x="topic", color=region_col, barmode="group")
         st.plotly_chart(fig, use_container_width=True)
-        st.caption("Interpretation: This chart shows which topics are more common in which user regions.")
 
-        st.subheader("Topic-Term Heatmap")
-        top_term_indices = np.argsort(H, axis=1)[:, -10:]
-        heatmap_matrix = np.array([[H[t][i] for i in top_term_indices[t]] for t in range(n_topics)])
-        fig_hm = go.Figure(data=go.Heatmap(z=heatmap_matrix, colorscale='Viridis'))
+        top_term_idx = np.argsort(H, axis=1)[:, -10:]
+        matrix = np.array([[H[t][i] for i in top_term_idx[t]] for t in range(n_topics)])
+
+        fig_hm = go.Figure(data=go.Heatmap(z=matrix, colorscale="Viridis"))
         st.plotly_chart(fig_hm, use_container_width=True)
-        st.caption("Interpretation: Darker cells indicate stronger relationships between terms and topics.")
 
-    ###########################
-    # TAB 2: TOPIC DISTANCE MAP
-    ###########################
+        st.caption("Brighter yellow = stronger association between topic and term.")
+
+    # -----------------------------------------
+    # TAB 2 — TOPIC DISTANCE MAP (MDS)
+    # -----------------------------------------
     with tabs[1]:
         st.header("Topic Distance Map (MDS)")
-        st.write("This plot shows how similar or different the topics are. Closer points mean more similar topics.")
 
         distances = pairwise_distances(H)
-        coords = MDS(n_components=2, random_state=42, dissimilarity='precomputed').fit_transform(distances)
+        coords = MDS(n_components=2, random_state=42,
+                     dissimilarity="precomputed").fit_transform(distances)
 
-        fig = px.scatter(x=coords[:, 0], y=coords[:, 1], text=[f"T{i}" for i in range(n_topics)],
-                         color=list(range(n_topics)), color_continuous_scale='Viridis')
-        fig.update_traces(textposition='top center')
+        fig = px.scatter(
+            x=coords[:, 0], y=coords[:, 1],
+            text=[f"T{i}" for i in range(n_topics)],
+            color=list(range(n_topics)),
+            color_continuous_scale="Viridis"
+        )
+        fig.update_traces(textposition="top center")
         st.plotly_chart(fig, use_container_width=True)
 
-    ###########################
-    # TAB 3: SEMANTIC NETWORK
-    ###########################
+    # -----------------------------------------
+    # TAB 3 — SEMANTIC NETWORK
+    # -----------------------------------------
     with tabs[2]:
         st.header("Semantic Co-occurrence Network")
-        st.write("Nodes represent words. Links show how often they appear in the same topic.")
 
         G = nx.Graph()
+
         for t in range(n_topics):
-            top_idx = H[t].argsort()[-8:]
+            top_idx = H[t].argsort()[-7:]
             words = [feature_names[i] for i in top_idx]
             for w1, w2 in combinations(words, 2):
-                weight = 1
                 if G.has_edge(w1, w2):
-                    G[w1][w2]['weight'] += weight
+                    G[w1][w2]["weight"] += 1
                 else:
-                    G.add_edge(w1, w2, weight=weight)
+                    G.add_edge(w1, w2, weight=1)
 
+        pos = nx.spring_layout(G, k=0.6, iterations=40)
         degrees = dict(G.degree())
-        pos = nx.spring_layout(G, k=0.4)
 
         edge_x, edge_y = [], []
         for u, v in G.edges():
@@ -189,48 +199,101 @@ if uploaded:
             edge_x += [x0, x1, None]
             edge_y += [y0, y1, None]
 
-        node_x, node_y, sizes = [], [], []
+        node_x, node_y, size = [], [], []
         for node in G.nodes():
             x, y = pos[node]
             node_x.append(x)
             node_y.append(y)
-            sizes.append(10 + degrees[node] * 3)
+            size.append(10 + degrees[node] * 4)
 
         fig_net = go.Figure()
-        fig_net.add_trace(go.Scatter(x=edge_x, y=edge_y, mode='lines', line=dict(width=1, color='lightgray')))
-        fig_net.add_trace(go.Scatter(x=node_x, y=node_y, mode='markers+text', text=list(G.nodes()),
-                                     textposition='top center', marker=dict(size=sizes, color=sizes, colorscale='Viridis')))
-        fig_net.update_layout(showlegend=False)
+        fig_net.add_trace(go.Scatter(
+            x=edge_x, y=edge_y,
+            mode="lines",
+            line=dict(width=0.7, color="lightgray")
+        ))
+
+        fig_net.add_trace(go.Scatter(
+            x=node_x, y=node_y,
+            mode="markers+text",
+            text=list(G.nodes()),
+            textposition="top center",
+            marker=dict(size=size, color=size, colorscale="Viridis")
+        ))
+
+        fig_net.update_layout(
+            height=700,
+            margin=dict(l=20, r=20, t=20, b=20),
+            showlegend=False
+        )
+
         st.plotly_chart(fig_net, use_container_width=True)
+        st.caption("Bigger nodes = more central concepts. Edges = co-occurrence in topic top terms.")
 
-        st.caption("Interpretation: Bigger nodes are more central terms. Clusters reveal conceptual groupings.")
-
-    ###########################
-    # TAB 4: SENTIMENT ANALYSIS
-    ###########################
+    # -----------------------------------------
+    # TAB 4 — SENTIMENT
+    # -----------------------------------------
     with tabs[3]:
         st.header("Sentiment Analysis (VADER)")
-        st.write("This shows whether the text is expressed positively, negatively, or neutrally.")
 
         sia = SentimentIntensityAnalyzer()
-        df['sentiment_score'] = df[text_col].apply(lambda x: sia.polarity_scores(x)['compound'])
-        df['sentiment_label'] = df['sentiment_score'].apply(lambda x: 'Positive' if x > 0.05 else ('Negative' if x < -0.05 else 'Neutral'))
+        df["sentiment_score"] = df[text_col].apply(lambda x: sia.polarity_scores(x)["compound"])
+        df["sentiment_label"] = df["sentiment_score"].apply(
+            lambda s: "Positive" if s > 0.05 else ("Negative" if s < -0.05 else "Neutral")
+        )
 
         color_map = {"Positive": "blue", "Negative": "red", "Neutral": "gray"}
-        fig = px.histogram(df, x='sentiment_label', color='sentiment_label',
-                           color_discrete_map=color_map, barnorm='percent')
-        st.plotly_chart(fig, use_container_width=True)
-        st.caption("Interpretation: Compare emotional tone across models or regions.")
 
-    ###########################
-    # TAB 5: WORDCLOUDS
-    ###########################
+        fig = px.histogram(
+            df, x="sentiment_label", color="sentiment_label",
+            color_discrete_map=color_map, barnorm="percent"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.subheader("Sentiment by Region")
+        fig = px.histogram(
+            df, x="sentiment_label", color=region_col,
+            color_discrete_map=color_map, barnorm="percent"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.subheader("Sentiment by Model")
+        fig = px.histogram(
+            df, x="sentiment_label", color=model_col,
+            color_discrete_map=color_map, barnorm="percent"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    # -----------------------------------------
+    # TAB 5 — WORDCLOUDS
+    # -----------------------------------------
     with tabs[4]:
         st.header("Wordclouds (Region × Model)")
-        st.write("These wordclouds highlight common terms within each Region–Model combination.")
 
         groups = df.groupby([region_col, model_col])
         for (reg, mod), subset in groups:
             st.subheader(f"{reg} – {mod}")
+
             text = " ".join(subset[text_col].astype(str).tolist())
+            if len(text.strip()) < 5:
+                st.write("Not enough text.")
+                continue
+
+            wc = WordCloud(width=800, height=400, background_color="white").generate(text)
+            st.image(wc.to_array(), use_container_width=True)
+
+    # -----------------------------------------
+    # TAB 6 — REGION × MODEL ANALYSIS
+    # -----------------------------------------
+    with tabs[5]:
+        st.header("Region × Model Interaction Analysis")
+
+        fig = px.density_heatmap(
+            df, x=region_col, y=model_col,
+            color_continuous_scale="Viridis"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.caption("Shows concentration of responses for each Region × Model combination.")
+
 

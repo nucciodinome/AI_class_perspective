@@ -32,7 +32,59 @@ if uploaded:
     model_col = st.sidebar.selectbox("Select model column", df.columns)
     region_col = st.sidebar.selectbox("Select user region column", df.columns)
 
-    default_stop = set(nltk.corpus.stopwords.words('english')) if nltk else set()
+
+    default_stop = {
+    # Core English stopwords (NLTK + SpaCy + scikit-learn)
+    "a","about","above","across","after","again","against","all","almost","alone","along","already",
+    "also","although","always","am","among","an","and","another","any","anybody","anyone","anything",
+    "anyway","anywhere","are","aren't","around","as","at","back","be","became","because","become",
+    "becomes","becoming","been","before","beforehand","behind","being","below","beside","besides",
+    "between","beyond","both","but","by","can","can't","cannot","could","couldn't","did","didn't","do",
+    "does","doesn't","doing","don't","done","down","during","each","either","else","elsewhere","enough",
+    "even","ever","every","everybody","everyone","everything","everywhere","except","few","fifteen",
+    "fifty","first","five","for","former","formerly","forty","four","from","further","had","hadn't",
+    "has","hasn't","have","haven't","having","he","he'd","he'll","he's","her","here","here's","hers",
+    "herself","him","himself","his","how","however","i","i'd","i'll","i'm","i've","if","in","indeed",
+    "instead","into","is","isn't","it","it's","its","itself","just","keep","keeps","kept","know",
+    "known","knows","last","least","less","let","let's","like","likely","long","made","make","makes",
+    "many","may","maybe","me","might","mightn't","mine","more","most","mostly","much","must","mustn't",
+    "my","myself","neither","never","nevertheless","new","next","nine","no","nobody","none","nor","not",
+    "nothing","now","nowhere","of","off","often","on","once","one","only","onto","or","other","others",
+    "otherwise","our","ours","ourselves","out","over","own","part","per","perhaps","please","put",
+    "rather","really","said","same","say","says","second","see","seem","seemed","seeming","seems",
+    "several","she","she'd","she'll","she's","should","shouldn't","since","six","so","some","somebody",
+    "someone","something","sometimes","somewhere","still","such","taking","ten","than","that","that's",
+    "the","their","theirs","them","themselves","then","there","there's","therefore","these","they",
+    "they'd","they'll","they're","they've","thing","things","think","third","this","those","though",
+    "three","through","throughout","to","together","too","toward","towards","try","trying","twenty",
+    "two","under","until","up","upon","us","use","used","using","usually","very","via","was","wasn't",
+    "we","we'd","we'll","we're","we've","well","were","weren't","what","what's","whatever","when",
+    "when's","whenever","where","where's","whether","which","while","who","who's","whoever","whole",
+    "whom","why","why's","will","with","within","without","won't","would","wouldn't","yes","yet","you",
+    "you'd","you'll","you're","you've","your","yours","yourself","yourselves",
+
+    # Conversational fillers (common in student texts & AI models)
+    "uh","um","hmm","ok","okay","yeah","yep","right","well","basically","literally","actually",
+    "kinda","sorta","maybe","perhaps","guess","like","just","really","quite","thing","things",
+
+    # AI-text filler words that hurt topic modeling
+    "however","therefore","overall","additionally","moreover","furthermore","importantly",
+    "significantly","interesting","notably","essentially","generally","typically","commonly",
+    "broadly","context","contextual","aspect","aspects","factor","factors","issue","issues",
+    "topic","topics","example","examples","point","points","situation","situations",
+
+    # Punctuation tokens / artifacts
+    ".",",",";","!","?","-","_","(",")","[","]","{","}","'","\"","…”","“","”","’","…",
+
+    # Common verbs that usually do not define topics
+    "be","have","do","did","does","done","make","get","got","give","take","see","seen","go","went",
+    "feel","felt","know","think","say","said","use","used",
+
+    # Academic filler (common in student answers)
+    "analysis","study","studies","student","students","research","paper","text","section","paragraph",
+    "author","authors","article","information","data","discuss","discusses","explain","explains",
+    "describe","describes","states","argues","shows","suggests"
+}
     sociological_stop = {"people", "think", "say", "study", "student", "analysis", "text", "use", "like"}
     custom_stop = st.sidebar.text_area("Add custom stopwords (comma-separated)")
     custom_stop = set([w.strip().lower() for w in custom_stop.split(",") if w.strip()])

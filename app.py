@@ -84,7 +84,7 @@ if uploaded:
     "analysis","study","studies","student","students","research","paper","text","section","paragraph",
     "author","authors","article","information","data","discuss","discusses","explain","explains",
     "describe","describes","states","argues","shows","suggests"
-}
+    }
     sociological_stop = {"people", "think", "say", "study", "student", "analysis", "text", "use", "like"}
     custom_stop = st.sidebar.text_area("Add custom stopwords (comma-separated)")
     custom_stop = set([w.strip().lower() for w in custom_stop.split(",") if w.strip()])

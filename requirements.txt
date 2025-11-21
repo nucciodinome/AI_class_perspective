@@ -1,1 +1,9 @@
-pip install streamlit bertopic sentence-transformers plotly wordcloud transformers
+streamlit
+pandas
+numpy
+scikit-learn
+nltk
+plotly
+networkx
+matplotlib
+wordcloud

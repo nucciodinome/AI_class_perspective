@@ -8,3 +8,4 @@ networkx
 matplotlib
 wordcloud
 openpyxl
+pyvis

@@ -4,8 +4,7 @@ numpy
 scikit-learn
 nltk
 plotly
-networkx
 matplotlib
 wordcloud
 openpyxl
-pyvis
+networkx

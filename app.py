@@ -85,10 +85,14 @@ if uploaded:
     "author","authors","article","information","data","discuss","discusses","explain","explains",
     "describe","describes","states","argues","shows","suggests"
     }
+    sociological_stop = {
+    "people", "think", "say", "study", "student", "analysis", "text", "use", "like"
+    }
     
-    sociological_stop = {"people", "think", "say", "study", "student", "analysis", "text", "use", "like"}
     custom_stop = st.sidebar.text_area("Add custom stopwords (comma-separated)")
-    custom_stop = set([w.strip().lower() for w in custom_stop.split(",") if w.strip()])
+    custom_stop = set(w.strip().lower() for w in custom_stop.split(",") if w.strip())
+    
+    stopwords_final = default_stop.union(sociological_stop).union(custom_stop)
     stopwords_final = sorted(list(stopwords_final))
 
     n_topics = st.sidebar.slider("Number of topics", 3, 20, 5)

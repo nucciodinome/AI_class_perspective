@@ -317,14 +317,14 @@ if uploaded:
 
         st.subheader("Sentiment by Region")
         fig = px.histogram(
-            df, x="sentiment_label", color=region_col,
+            df, x="sentiment_label", color=color_map,
             color_discrete_map=color_map, barnorm="percent"
         )
         st.plotly_chart(fig, use_container_width=True)
 
         st.subheader("Sentiment by Model")
         fig = px.histogram(
-            df, x="sentiment_label", color=model_col,
+            df, x="sentiment_label", color=color_map,
             color_discrete_map=color_map, barnorm="percent"
         )
         st.plotly_chart(fig, use_container_width=True)

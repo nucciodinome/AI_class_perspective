@@ -1,45 +1,49 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import nltk
+from nltk.sentiment import SentimentIntensityAnalyzer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import NMF
 from sklearn.metrics import pairwise_distances
 from sklearn.manifold import MDS
-from nltk.sentiment import SentimentIntensityAnalyzer
+from sklearn.preprocessing import normalize
 import plotly.express as px
 import plotly.graph_objects as go
 import networkx as nx
 from wordcloud import WordCloud
 from itertools import combinations
+from collections import Counter
 
-# ---------------------------------------------
+# ------------------------------------------------------
 # SAFE NLTK DOWNLOAD
-# ---------------------------------------------
-import nltk
+# ------------------------------------------------------
 nltk.download("vader_lexicon", quiet=True)
 
-# ---------------------------------------------
+# ------------------------------------------------------
 # STREAMLIT CONFIG
-# ---------------------------------------------
-st.set_page_config(page_title="Advanced Text Analysis App", layout="wide")
-st.title("Advanced Text Analysis App – Topics, Semantics, Sentiment, Wordclouds")
+# ------------------------------------------------------
+st.set_page_config(page_title="Ultra-Advanced Text Analysis Suite", layout="wide")
+st.title("📊 Ultra-Advanced Text Analysis Suite")
 
-# ---------------------------------------------
+# ------------------------------------------------------
 # UPLOAD FILE
-# ---------------------------------------------
+# ------------------------------------------------------
 uploaded = st.file_uploader("Upload dataset (Excel or CSV)", type=["xlsx", "xls", "csv"])
 
 if uploaded:
-    # Load file
+
+    # Load file safely
     if uploaded.name.endswith("csv"):
         df = pd.read_csv(uploaded)
     else:
         df = pd.read_excel(uploaded)
 
-    # -----------------------------------------
-    # SIDEBAR INPUTS
-    # -----------------------------------------
+    # --------------------------------------------------
+    # SIDEBAR SETTINGS
+    # --------------------------------------------------
     st.sidebar.header("Settings")
+
     text_col = st.sidebar.selectbox("Select text column", df.columns)
     model_col = st.sidebar.selectbox("Select model column", df.columns)
     region_col = st.sidebar.selectbox("Select user region column", df.columns)
@@ -87,110 +91,169 @@ if uploaded:
 
     stopwords_final = sorted(default_stop.union(sociological_stop).union(custom_stop))
 
-    # -----------------------------------------
-    # TOPIC MODELING INPUTS
-    # -----------------------------------------
-    n_topics = st.sidebar.slider("Number of topics", 3, 20, 6)
+    # --------------------------------------------------
+    # Topic modeling sliders
+    # --------------------------------------------------
+    n_topics = st.sidebar.slider("Number of topic clusters", 3, 20, 6)
     min_df = st.sidebar.slider("Min document frequency", 1, 10, 2)
-    max_df = st.sidebar.slider("Max document frequency", 0.1, 1.0, 0.9)
+    max_df = st.sidebar.slider("Max document frequency fraction", 0.1, 1.0, 0.9)
+    top_n_words = st.sidebar.slider("Top terms per topic", 5, 30, 10)
 
+    # --------------------------------------------------
+    # Create tabs
+    # --------------------------------------------------
     tabs = st.tabs([
-        "Topic Modeling", "Topic Distance Map", "Semantic Network",
-        "Sentiment", "Wordclouds", "Region × Model Analysis"
+        "1️⃣ Topic Modeling",
+        "2️⃣ STM-style Word Differences",
+        "3️⃣ Topic Distance Map",
+        "4️⃣ Semantic Network",
+        "5️⃣ Sentiment",
+        "6️⃣ Wordclouds",
+        "7️⃣ Region × Model Analysis"
     ])
 
-    # -----------------------------------------
+    # --------------------------------------------------
     # CLEAN TEXT
-    # -----------------------------------------
+    # --------------------------------------------------
     df = df.dropna(subset=[text_col])
     docs = df[text_col].astype(str).tolist()
 
-    # -----------------------------------------
-    # TF-IDF
-    # -----------------------------------------
+    # --------------------------------------------------
+    # TF-IDF (UNIGRAMS ONLY)
+    # --------------------------------------------------
     tfidf = TfidfVectorizer(
         stop_words=stopwords_final,
         max_features=6000,
         min_df=min_df,
         max_df=max_df,
-        ngram_range=(1, 2)
+        ngram_range=(1,1)     # <<< ONLY WORDS, NO BIGRAMS
     )
     X = tfidf.fit_transform(docs)
-    feature_names = tfidf.get_feature_names_out()
+    feature_names = np.array(tfidf.get_feature_names_out())
 
-    # -----------------------------------------
+    # --------------------------------------------------
     # NMF TOPIC MODEL
-    # -----------------------------------------
+    # --------------------------------------------------
     nmf = NMF(n_components=n_topics, random_state=42)
     W = nmf.fit_transform(X)
     H = nmf.components_
     df["topic"] = W.argmax(axis=1)
 
-    def label_topic(t):
-        top_idx = H[t].argsort()[-6:][::-1]
-        return ", ".join(feature_names[i] for i in top_idx)
+    # helper: top words
+    def top_words(topic_idx, n=top_n_words):
+        idx = H[topic_idx].argsort()[-n:][::-1]
+        return feature_names[idx], H[topic_idx][idx]
 
-    # -----------------------------------------
+    # ------------------------------------------------------------
     # TAB 1 — TOPIC MODELING
-    # -----------------------------------------
+    # ------------------------------------------------------------
     with tabs[0]:
-        st.header("Topic Modeling (NMF)")
+        st.subheader("📌 Extracted Topics")
 
-        topic_labels = [label_topic(i) for i in range(n_topics)]
-        st.dataframe(
-            pd.DataFrame({"Topic": list(range(n_topics)), "Top Terms": topic_labels}),
-            use_container_width=True
+        topic_rows = []
+        for t in range(n_topics):
+            words, _ = top_words(t)
+            topic_rows.append({"Topic": t, "Top Terms": ", ".join(words)})
+
+        st.dataframe(pd.DataFrame(topic_rows), use_container_width=True)
+
+        # ------------------- Topic distribution by region
+        st.subheader("Topic Distribution by Region")
+        fig = px.histogram(
+            df, x="topic", color=region_col, barmode="group",
+            color_discrete_sequence=px.colors.qualitative.Set2
         )
-
-        fig = px.histogram(df, x="topic", color=region_col, barmode="group")
         st.plotly_chart(fig, use_container_width=True)
 
-        top_term_idx = np.argsort(H, axis=1)[:, -10:]
-        matrix = np.array([[H[t][i] for i in top_term_idx[t]] for t in range(n_topics)])
-
-        fig_hm = go.Figure(data=go.Heatmap(z=matrix, colorscale="Viridis"))
+        # ------------------- Topic-term heatmap
+        st.subheader("Topic–Term Heatmap")
+        heat = np.vstack([top_words(t, top_n_words)[1] for t in range(n_topics)])
+        fig_hm = go.Figure(
+            data=go.Heatmap(
+                z=heat,
+                x=[f"Top {i+1}" for i in range(top_n_words)],
+                y=[f"Topic {i}" for i in range(n_topics)],
+                colorscale="Viridis"
+            )
+        )
         st.plotly_chart(fig_hm, use_container_width=True)
+        st.caption("Brighter yellow = stronger association.")
 
-        st.caption("Brighter yellow = stronger association between topic and term.")
-
-    # -----------------------------------------
-    # TAB 2 — TOPIC DISTANCE MAP (MDS)
-    # -----------------------------------------
+    # ------------------------------------------------------------
+    # TAB 2 — STM-STYLE DIFFERENCE PLOTS
+    # ------------------------------------------------------------
     with tabs[1]:
+        st.header("STM-Style Difference-in-Word-Use Analysis")
+
+        condition = st.selectbox("Compare by:", [model_col, region_col])
+
+        groups = df.groupby(condition)
+        if len(groups) != 2:
+            st.warning("Need exactly 2 groups to compute difference plot.")
+        else:
+            g1, g2 = list(groups.groups.keys())
+            texts1 = " ".join(df[df[condition] == g1][text_col].astype(str))
+            texts2 = " ".join(df[df[condition] == g2][text_col].astype(str))
+
+            words1 = Counter([w for w in texts1.lower().split() if w not in stopwords_final])
+            words2 = Counter([w for w in texts2.lower().split() if w not in stopwords_final])
+
+            vocab = list(set(words1.keys()).union(words2.keys()))
+            diff = []
+            for w in vocab:
+                diff.append({
+                    "word": w,
+                    "diff": words1[w] - words2[w]
+                })
+
+            diff_df = pd.DataFrame(diff)
+            diff_df["abs"] = diff_df["diff"].abs()
+            diff_df = diff_df.sort_values("abs", ascending=False).head(40)
+
+            fig = px.bar(
+                diff_df, x="word", y="diff",
+                color="diff", color_continuous_scale="RdBu",
+                title=f"Word Usage Difference: {g1} vs {g2}"
+            )
+            fig.update_layout(xaxis={'categoryorder':'total descending'})
+            st.plotly_chart(fig, use_container_width=True)
+
+    # ------------------------------------------------------------
+    # TAB 3 — TOPIC DISTANCE MAP
+    # ------------------------------------------------------------
+    with tabs[2]:
         st.header("Topic Distance Map (MDS)")
-
-        distances = pairwise_distances(H)
+        dist = pairwise_distances(H)
         coords = MDS(n_components=2, random_state=42,
-                     dissimilarity="precomputed").fit_transform(distances)
-
+                     dissimilarity="precomputed").fit_transform(dist)
         fig = px.scatter(
-            x=coords[:, 0], y=coords[:, 1],
+            x=coords[:,0], y=coords[:,1],
             text=[f"T{i}" for i in range(n_topics)],
             color=list(range(n_topics)),
             color_continuous_scale="Viridis"
         )
-        fig.update_traces(textposition="top center")
         st.plotly_chart(fig, use_container_width=True)
 
-    # -----------------------------------------
-    # TAB 3 — SEMANTIC NETWORK
-    # -----------------------------------------
-    with tabs[2]:
-        st.header("Semantic Co-occurrence Network")
+    # ------------------------------------------------------------
+    # TAB 4 — SEMANTIC NETWORK
+    # ------------------------------------------------------------
+    with tabs[3]:
+        st.header("Semantic Network (Improved)")
 
         G = nx.Graph()
 
         for t in range(n_topics):
-            top_idx = H[t].argsort()[-7:]
-            words = [feature_names[i] for i in top_idx]
+            words, _ = top_words(t, 12)
             for w1, w2 in combinations(words, 2):
                 if G.has_edge(w1, w2):
                     G[w1][w2]["weight"] += 1
                 else:
                     G.add_edge(w1, w2, weight=1)
 
-        pos = nx.spring_layout(G, k=0.6, iterations=40)
-        degrees = dict(G.degree())
+        centrality = nx.betweenness_centrality(G)
+        size = [8 + 80 * centrality[n] for n in G.nodes()]
+
+        pos = nx.spring_layout(G, k=0.7, iterations=50, seed=42)
 
         edge_x, edge_y = [], []
         for u, v in G.edges():
@@ -199,54 +262,54 @@ if uploaded:
             edge_x += [x0, x1, None]
             edge_y += [y0, y1, None]
 
-        node_x, node_y, size = [], [], []
-        for node in G.nodes():
-            x, y = pos[node]
+        node_x, node_y = [], []
+        for n in G.nodes():
+            x, y = pos[n]
             node_x.append(x)
             node_y.append(y)
-            size.append(10 + degrees[node] * 4)
 
         fig_net = go.Figure()
+
         fig_net.add_trace(go.Scatter(
-            x=edge_x, y=edge_y,
-            mode="lines",
-            line=dict(width=0.7, color="lightgray")
+            x=edge_x, y=edge_y, mode="lines",
+            line=dict(width=1, color="lightgray")
         ))
 
         fig_net.add_trace(go.Scatter(
-            x=node_x, y=node_y,
-            mode="markers+text",
+            x=node_x, y=node_y, mode="markers+text",
             text=list(G.nodes()),
             textposition="top center",
             marker=dict(size=size, color=size, colorscale="Viridis")
         ))
 
-        fig_net.update_layout(
-            height=700,
-            margin=dict(l=20, r=20, t=20, b=20),
-            showlegend=False
-        )
-
+        fig_net.update_layout(height=800,
+                              margin=dict(l=10, r=10, b=10, t=10))
         st.plotly_chart(fig_net, use_container_width=True)
-        st.caption("Bigger nodes = more central concepts. Edges = co-occurrence in topic top terms.")
 
-    # -----------------------------------------
-    # TAB 4 — SENTIMENT
-    # -----------------------------------------
-    with tabs[3]:
+    # ------------------------------------------------------------
+    # TAB 5 — SENTIMENT ANALYSIS
+    # ------------------------------------------------------------
+    with tabs[4]:
         st.header("Sentiment Analysis (VADER)")
 
         sia = SentimentIntensityAnalyzer()
         df["sentiment_score"] = df[text_col].apply(lambda x: sia.polarity_scores(x)["compound"])
         df["sentiment_label"] = df["sentiment_score"].apply(
-            lambda s: "Positive" if s > 0.05 else ("Negative" if s < -0.05 else "Neutral")
+            lambda s: "Positive" if s>0.05 else ("Negative" if s<-0.05 else "Neutral")
         )
 
-        color_map = {"Positive": "blue", "Negative": "red", "Neutral": "gray"}
+        color_map = {
+            "Positive": "#4DA6FF",   # soft blue
+            "Negative": "#FF6666",   # soft red
+            "Neutral":  "#BFBFBF"
+        }
 
+        st.subheader("Sentiment Distribution")
         fig = px.histogram(
-            df, x="sentiment_label", color="sentiment_label",
-            color_discrete_map=color_map, barnorm="percent"
+            df, x="sentiment_label",
+            color="sentiment_label",
+            color_discrete_map=color_map,
+            barnorm="percent"
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -264,36 +327,33 @@ if uploaded:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # -----------------------------------------
-    # TAB 5 — WORDCLOUDS
-    # -----------------------------------------
-    with tabs[4]:
+    # ------------------------------------------------------------
+    # TAB 6 — WORDCLOUDS
+    # ------------------------------------------------------------
+    with tabs[5]:
         st.header("Wordclouds (Region × Model)")
 
         groups = df.groupby([region_col, model_col])
         for (reg, mod), subset in groups:
             st.subheader(f"{reg} – {mod}")
-
-            text = " ".join(subset[text_col].astype(str).tolist())
-            if len(text.strip()) < 5:
+            text = " ".join(subset[text_col].astype(str))
+            if len(text) < 20:
                 st.write("Not enough text.")
                 continue
-
-            wc = WordCloud(width=800, height=400, background_color="white").generate(text)
+            wc = WordCloud(width=1000, height=500,
+                           background_color="white").generate(text)
             st.image(wc.to_array(), use_container_width=True)
 
-    # -----------------------------------------
-    # TAB 6 — REGION × MODEL ANALYSIS
-    # -----------------------------------------
-    with tabs[5]:
-        st.header("Region × Model Interaction Analysis")
+    # ------------------------------------------------------------
+    # TAB 7 — REGION × MODEL INTERACTION
+    # ------------------------------------------------------------
+    with tabs[6]:
+        st.header("Region × Model Interaction")
 
         fig = px.density_heatmap(
             df, x=region_col, y=model_col,
             color_continuous_scale="Viridis"
         )
         st.plotly_chart(fig, use_container_width=True)
-
-        st.caption("Shows concentration of responses for each Region × Model combination.")
 
 

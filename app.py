@@ -117,151 +117,149 @@ if uploaded:
         "7️⃣ Region × Model Analysis"
     ])
 
+
+    # ------------------------------------------------------
+    # TEXT NORMALIZATION FUNCTION (remove punctuation + 1–2 char words)
+    # ------------------------------------------------------
+    import re
+    
+    def clean_tokenize(text):
+        """
+        Full cleaning:
+        - lowercase
+        - replace non-alphanumeric with spaces
+        - split on whitespace
+        - remove tokens of length <= 2
+        - remove stopwords
+        """
+        text = text.lower()
+        text = re.sub(r"[^a-z0-9]+", " ", text)       # keep only alphanumeric
+        tokens = text.split()
+        tokens = [t for t in tokens 
+                  if len(t) > 2 and t not in stopwords_final]  # remove 1–2 char + stopwords
+        return tokens
+    
+    
     # ------------------------------------------------------
     # CLEAN TEXT
     # ------------------------------------------------------
- # ------------------------------------------------------
-# TEXT NORMALIZATION FUNCTION (remove punctuation + 1–2 char words)
-# ------------------------------------------------------
-import re
-
-def clean_tokenize(text):
-    """
-    Full cleaning:
-    - lowercase
-    - replace non-alphanumeric with spaces
-    - split on whitespace
-    - remove tokens of length <= 2
-    - remove stopwords
-    """
-    text = text.lower()
-    text = re.sub(r"[^a-z0-9]+", " ", text)       # keep only alphanumeric
-    tokens = text.split()
-    tokens = [t for t in tokens 
-              if len(t) > 2 and t not in stopwords_final]  # remove 1–2 char + stopwords
-    return tokens
-
-
-# ------------------------------------------------------
-# CLEAN TEXT
-# ------------------------------------------------------
-df = df.dropna(subset=[text_col])
-
-# cleaned token lists for topic modeling
-df["_clean_tokens"] = df[text_col].astype(str).apply(clean_tokenize)
-
-# join back into text for TF-IDF
-docs = df["_clean_tokens"].apply(lambda toks: " ".join(toks)).tolist()
-
-
-# ------------------------------------------------------
-# TF-IDF (UNIGRAMS ONLY, only clean tokens)
-# ------------------------------------------------------
-tfidf = TfidfVectorizer(
-    stop_words=None,          # already cleaned
-    max_features=6000,
-    min_df=min_df,
-    max_df=max_df,
-    ngram_range=(1, 1)
-)
-
-X = tfidf.fit_transform(docs)
-feature_names = np.array(tfidf.get_feature_names_out())
-
-
-# ------------------------------------------------------
-# NMF TOPIC MODEL
-# ------------------------------------------------------
-nmf = NMF(n_components=n_topics, random_state=42)
-W = nmf.fit_transform(X)
-H = nmf.components_
-df["topic"] = W.argmax(axis=1)
-
-
-# ------------------------------------------------------
-# Helper: top words per topic
-# ------------------------------------------------------
-def top_words(topic_idx, n=top_n_words):
-    idx = H[topic_idx].argsort()[-n:][::-1]
-    return feature_names[idx], H[topic_idx][idx]
-
-
-# ======================================================
-# TAB 1 — TOPIC MODELING
-# ======================================================
-with tabs[0]:
-
-    st.subheader("📌 Extracted Topics")
-
-    topic_rows = []
-    for t in range(n_topics):
-        words, _ = top_words(t)
-        topic_rows.append({"Topic": t, "Top Terms": ", ".join(words)})
-
-    st.dataframe(pd.DataFrame(topic_rows), use_container_width=True)
-
-    # ---------------- Topic Distribution
-    st.subheader("Topic Distribution by Region")
-    fig = px.histogram(
-        df, x="topic", color=region_col, barmode="group",
-        color_discrete_sequence=px.colors.qualitative.Set2
+    df = df.dropna(subset=[text_col])
+    
+    # cleaned token lists for topic modeling
+    df["_clean_tokens"] = df[text_col].astype(str).apply(clean_tokenize)
+    
+    # join back into text for TF-IDF
+    docs = df["_clean_tokens"].apply(lambda toks: " ".join(toks)).tolist()
+    
+    
+    # ------------------------------------------------------
+    # TF-IDF (UNIGRAMS ONLY, only clean tokens)
+    # ------------------------------------------------------
+    tfidf = TfidfVectorizer(
+        stop_words=None,          # already cleaned
+        max_features=6000,
+        min_df=min_df,
+        max_df=max_df,
+        ngram_range=(1, 1)
     )
-    st.plotly_chart(fig, use_container_width=True)
-
-    # ---------------- Heatmap
-    st.subheader("Topic–Term Heatmap")
-    heat = np.vstack([top_words(t, top_n_words)[1] for t in range(n_topics)])
-    fig_hm = go.Figure(
-        data=go.Heatmap(
-            z=heat,
-            x=[f"Term {i+1}" for i in range(top_n_words)],
-            y=[f"Topic {i}" for i in range(n_topics)],
-            colorscale="Viridis"
+    
+    X = tfidf.fit_transform(docs)
+    feature_names = np.array(tfidf.get_feature_names_out())
+    
+    
+    # ------------------------------------------------------
+    # NMF TOPIC MODEL
+    # ------------------------------------------------------
+    nmf = NMF(n_components=n_topics, random_state=42)
+    W = nmf.fit_transform(X)
+    H = nmf.components_
+    df["topic"] = W.argmax(axis=1)
+    
+    
+    # ------------------------------------------------------
+    # Helper: top words per topic
+    # ------------------------------------------------------
+    def top_words(topic_idx, n=top_n_words):
+        idx = H[topic_idx].argsort()[-n:][::-1]
+        return feature_names[idx], H[topic_idx][idx]
+    
+    
+    # ======================================================
+    # TAB 1 — TOPIC MODELING
+    # ======================================================
+    with tabs[0]:
+    
+        st.subheader("📌 Extracted Topics")
+    
+        topic_rows = []
+        for t in range(n_topics):
+            words, _ = top_words(t)
+            topic_rows.append({"Topic": t, "Top Terms": ", ".join(words)})
+    
+        st.dataframe(pd.DataFrame(topic_rows), use_container_width=True)
+    
+        # ---------------- Topic Distribution
+        st.subheader("Topic Distribution by Region")
+        fig = px.histogram(
+            df, x="topic", color=region_col, barmode="group",
+            color_discrete_sequence=px.colors.qualitative.Set2
         )
-    )
-    st.plotly_chart(fig_hm, use_container_width=True)
-
-
-# ======================================================
-# TAB 2 — STM-STYLE DIFFERENCE PLOTS
-# ======================================================
-with tabs[1]:
-
-    st.header("STM-Style Difference-in-Word-Use Analysis")
-
-    condition = st.selectbox("Compare by:", [model_col, region_col])
-
-    groups = df.groupby(condition)
-    if len(groups) != 2:
-        st.warning("Select a variable with exactly 2 categories.")
-    else:
-        g1, g2 = list(groups.groups.keys())
-
-        # collect cleaned tokens, NOT raw text
-        tokens1 = df[df[condition] == g1]["_clean_tokens"].sum()
-        tokens2 = df[df[condition] == g2]["_clean_tokens"].sum()
-
-        w1 = Counter(tokens1)
-        w2 = Counter(tokens2)
-
-        vocab = list(set(w1.keys()).union(set(w2.keys())))
-
-        diff = [{"word": w, "diff": w1[w] - w2[w]} for w in vocab]
-
-        diff_df = pd.DataFrame(diff)
-        diff_df["abs"] = diff_df["diff"].abs()
-        diff_df = diff_df.sort_values("abs", ascending=False).head(40)
-
-        fig = px.bar(
-            diff_df,
-            x="word",
-            y="diff",
-            color="diff",
-            color_continuous_scale="RdBu",
-            title=f"{g1} vs {g2}: Word Usage Differences"
-        )
-        fig.update_layout(xaxis={'categoryorder': 'total descending'})
         st.plotly_chart(fig, use_container_width=True)
+    
+        # ---------------- Heatmap
+        st.subheader("Topic–Term Heatmap")
+        heat = np.vstack([top_words(t, top_n_words)[1] for t in range(n_topics)])
+        fig_hm = go.Figure(
+            data=go.Heatmap(
+                z=heat,
+                x=[f"Term {i+1}" for i in range(top_n_words)],
+                y=[f"Topic {i}" for i in range(n_topics)],
+                colorscale="Viridis"
+            )
+        )
+        st.plotly_chart(fig_hm, use_container_width=True)
+    
+    
+    # ======================================================
+    # TAB 2 — STM-STYLE DIFFERENCE PLOTS
+    # ======================================================
+    with tabs[1]:
+    
+        st.header("STM-Style Difference-in-Word-Use Analysis")
+    
+        condition = st.selectbox("Compare by:", [model_col, region_col])
+    
+        groups = df.groupby(condition)
+        if len(groups) != 2:
+            st.warning("Select a variable with exactly 2 categories.")
+        else:
+            g1, g2 = list(groups.groups.keys())
+    
+            # collect cleaned tokens, NOT raw text
+            tokens1 = df[df[condition] == g1]["_clean_tokens"].sum()
+            tokens2 = df[df[condition] == g2]["_clean_tokens"].sum()
+    
+            w1 = Counter(tokens1)
+            w2 = Counter(tokens2)
+    
+            vocab = list(set(w1.keys()).union(set(w2.keys())))
+    
+            diff = [{"word": w, "diff": w1[w] - w2[w]} for w in vocab]
+    
+            diff_df = pd.DataFrame(diff)
+            diff_df["abs"] = diff_df["diff"].abs()
+            diff_df = diff_df.sort_values("abs", ascending=False).head(40)
+    
+            fig = px.bar(
+                diff_df,
+                x="word",
+                y="diff",
+                color="diff",
+                color_continuous_scale="RdBu",
+                title=f"{g1} vs {g2}: Word Usage Differences"
+            )
+            fig.update_layout(xaxis={'categoryorder': 'total descending'})
+            st.plotly_chart(fig, use_container_width=True)
 
     # ======================================================
     # TAB 3 — TOPIC DISTANCE MAP

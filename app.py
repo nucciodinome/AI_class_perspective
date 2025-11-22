@@ -293,7 +293,7 @@ if uploaded:
     # ======================================================
     # TAB 5 — SENTIMENT (CORRECTED)
     # ======================================================
-
+    
     with tabs[4]:
         
         st.header("Sentiment Analysis (VADER)")
@@ -359,41 +359,43 @@ if uploaded:
         st.caption("Percentages are calculated relative to the entire dataset (not per category).")
     
         # =====================================================================
-        # 2) Sentiment by Region
+        # 2) Sentiment by Region  (FIXED — color = sentiment)
         # =====================================================================
         st.subheader("Sentiment by Region")
     
         fig = px.histogram(
             df,
-            x="sentiment_label",
-            color=region_col,
-            barnorm="percent",               # % within each region
+            x=region_col,                  # <-- region on x-axis
+            color="sentiment_label",       # <-- colors represent sentiment
+            barnorm="percent",             # <-- % within each region
             color_discrete_map=color_map
         )
     
         fig.update_layout(
-            xaxis_title="Sentiment",
-            yaxis_title="Percent within each region",
+            xaxis_title="Region",
+            yaxis_title="Percent sentiment within region",
+            legend_title="Sentiment"
         )
     
         st.plotly_chart(fig, use_container_width=True)
     
         # =====================================================================
-        # 3) Sentiment by Model
+        # 3) Sentiment by Model (FIXED — color = sentiment)
         # =====================================================================
         st.subheader("Sentiment by Model")
     
         fig = px.histogram(
             df,
-            x="sentiment_label",
-            color=model_col,
-            barnorm="percent",               # % within each model
+            x=model_col,                   # <-- model on x-axis
+            color="sentiment_label",       # <-- colors represent sentiment
+            barnorm="percent",             # <-- % within each model
             color_discrete_map=color_map
         )
     
         fig.update_layout(
-            xaxis_title="Sentiment",
-            yaxis_title="Percent within each model",
+            xaxis_title="Model",
+            yaxis_title="Percent sentiment within model",
+            legend_title="Sentiment"
         )
     
         st.plotly_chart(fig, use_container_width=True)

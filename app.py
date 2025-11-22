@@ -443,18 +443,14 @@ if uploaded:
             marker=dict(
                 size=node_sizes,
                 color=node_colors,
-                opacity=0.96,
-                line=dict(color="rgba(0,0,0,0)", width=1),  # nessun bordo di default
+                opacity=0.97,
+                line=dict(color="rgba(0,0,0,0)", width=1),  # nessun bordo fisso
             ),
-            selected=dict(
-                marker=dict(
-                    line=dict(color="darkred", width=3)     # bordo rosso SOLO su hover/click
-                )
-            ),
-            unselected=dict(
-                marker=dict(
-                    opacity=0.5
-                )
+            
+            hoverlabel=dict(
+                bgcolor="rgba(255,235,235,0.85)",  # sfondo rosa tenue
+                bordercolor="darkred",
+                font=dict(color="black")
             ),
         ))
     

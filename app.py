@@ -320,7 +320,7 @@ if uploaded:
         fig_net = go.Figure()
         fig_net.add_trace(go.Scatter(
             x=edge_x, y=edge_y, mode="lines",
-            line=dict(width=1, color="lightgray")
+            line=dict(width=1, color="gray")
         ))
         fig_net.add_trace(go.Scatter(
             x=node_x, y=node_y, mode="markers+text",

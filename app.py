@@ -81,10 +81,12 @@ if uploaded:
         "kinda","sorta","maybe","guess","just","really","quite",
 
         # Academic filler
-        "analysis","study","studies","research","paper","text","section","paragraph","author","authors"
+        "analysis","study","studies","research","paper","text","section","paragraph","author","authors",
+        # Punctuation tokens / artifacts 
+        ".",",",";","!","?","_","(",")","[","]","{","}","'","\"","…”","“","”","’","…"
     }
 
-    sociological_stop = {"people","think","say","study","student","analysis","text","use","like"}
+    sociological_stop = {"people","think","say","study","student","analysis","text","use","like", "beijing", "washington", "dc", "&", "post-decarbonized", "world", "decarbonized", "post"}
 
     custom_stop = st.sidebar.text_area("Add custom stopwords (comma-separated)")
     custom_stop = set(w.strip().lower() for w in custom_stop.split(",") if w.strip())

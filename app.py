@@ -359,7 +359,7 @@ if uploaded:
         dense_shifted = dense_colors[2:]
     
         # Map degree centrality → color index
-        cent_vals = np.array([deg_cent[n] for n in G.nodes()])
+        cent_vals = np.array([deg_cent[n] for n in G.nodes()], dtype=float)
         cent_norm = (cent_vals - cent_vals.min()) / (cent_vals.ptp() + 1e-9)
         color_ids = (cent_norm * (len(dense_shifted) - 1)).astype(int)
         node_colors = [dense_shifted[i] for i in color_ids]

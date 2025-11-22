@@ -284,21 +284,21 @@ if uploaded:
         st.plotly_chart(fig, use_container_width=True)
 
     # ======================================================
-    # TAB 4 — SEMANTIC NETWORK (FINAL & CORRECT)
+    # TAB 4 — SEMANTIC NETWORK (GOLD STANDARD + INTERACTIVE)
     # ======================================================
     with tabs[3]:
     
-        st.header("Semantic Network (Improved + Interactive)")
+        st.header("Semantic Network (Weighted Strength Centrality + Interactive)")
     
-        # ---- Slider: minimum co-occurrence strength to keep edge ----
-        min_w = st.slider(
-            "Minimum term co-occurrence weight", 
-            min_value=1, max_value=5, value=1, step=1
-        )
+        # -------------------------------------------
+        # SLIDERS
+        # -------------------------------------------
+        min_w = st.slider("Minimum co-occurrence weight", 1, 6, 1)
+        min_cent = st.slider("Minimum node strength (centrality filter)", 0.0, 1.0, 0.0, 0.01)
     
-        # ---------------------------------------------------------
-        # Build co-occurrence graph
-        # ---------------------------------------------------------
+        # -------------------------------------------
+        # BUILD GRAPH
+        # -------------------------------------------
         G = nx.Graph()
     
         for t in range(n_topics):
@@ -309,114 +309,131 @@ if uploaded:
                 else:
                     G.add_edge(w1, w2, weight=1)
     
-        # ---- Filter edges by co-occurrence threshold ----
+        # -------------------------------------------
+        # FILTER EDGES BY WEIGHT
+        # -------------------------------------------
         edges_to_remove = [(u, v) for u, v, d in G.edges(data=True) if d["weight"] < min_w]
         G.remove_edges_from(edges_to_remove)
-    
-        # Also remove isolated nodes
-        isolated = list(nx.isolates(G))
-        G.remove_nodes_from(isolated)
+        G.remove_nodes_from(list(nx.isolates(G)))
     
         if len(G.nodes()) == 0:
-            st.warning("No terms remain with the selected co-occurrence threshold.")
+            st.warning("No nodes remain with this threshold. Lower the filter.")
             st.stop()
     
-        # ---------------------------------------------------------
-        # DEGREE CENTRALITY for node color
-        # ---------------------------------------------------------
-        deg_cent = nx.degree_centrality(G)
+        # -------------------------------------------
+        # WEIGHTED STRENGTH CENTRALITY (GOLD STANDARD)
+        # -------------------------------------------
+        strength = {
+            n: sum(d["weight"] for _, _, d in G.edges(n, data=True))
+            for n in G.nodes()
+        }
     
-        # Node sizes (original rule)
-        size = [8 + 80 * deg_cent[n] for n in G.nodes()]
+        cent_vals = np.array(list(strength.values()), dtype=float)
+        ptp = cent_vals.ptp()
     
-        # ---------------------------------------------------------
-        # Layout
-        # ---------------------------------------------------------
-        pos = nx.spring_layout(G, k=0.7, iterations=50, seed=42)
+        if ptp == 0:
+            cent_norm = np.ones_like(cent_vals) * 0.5
+        else:
+            cent_norm = (cent_vals - cent_vals.min()) / ptp
     
-        # ---------------------------------------------------------
-        # Prepare edges for Plotly (width = weight)
-        # ---------------------------------------------------------
-        edge_x, edge_y, edge_widths = [], [], []
-        for u, v, d in G.edges(data=True):
-            x0, y0 = pos[u]
-            x1, y1 = pos[v]
-            edge_x += [x0, x1, None]
-            edge_y += [y0, y1, None]
-            edge_widths.append(d["weight"])
+        # FILTER BY CENTRALITY
+        keep_nodes = [n for n, c in zip(G.nodes(), cent_norm) if c >= min_cent]
+        G = G.subgraph(keep_nodes).copy()
     
-        # ---------------------------------------------------------
-        # Custom "dense" colorscale (slice from original)
-        # ---------------------------------------------------------
+        if len(G.nodes()) == 0:
+            st.warning("No nodes remain after centrality filtering.")
+            st.stop()
+    
+        # -------------------------------------------
+        # COLOR PALETTE DENSE (from 3rd color)
+        # -------------------------------------------
         dense_colors = [
             "rgb(54,14,36)", "rgb(80,20,66)", "rgb(100,31,104)",
             "rgb(113,50,141)", "rgb(119,74,175)", "rgb(120,100,202)",
             "rgb(117,127,221)", "rgb(115,154,228)", "rgb(129,180,227)",
             "rgb(156,201,226)", "rgb(191,221,229)"
         ]
+        palette = dense_colors[2:]
     
-        # Use only colors after the first two (your request)
-        dense_shifted = dense_colors[2:]
+        cent_vals = np.array([strength[n] for n in G.nodes()])
+        norm = (cent_vals - cent_vals.min()) / (cent_vals.ptp() + 1e-9)
     
-        # Map degree centrality → color index
-        # Degree centrality → convert to NumPy array
-        cent_vals = np.array([deg_cent[n] for n in G.nodes()], dtype=float)
-        
-        # Normalize to [0, 1]
-        cent_norm = (cent_vals - cent_vals.min()) / (cent_vals.ptp() + 1e-9)
-        
-        # Map to dense palette
-        color_ids = (cent_norm * (len(dense_shifted) - 1)).astype(int)
-        node_colors = [dense_shifted[i] for i in color_ids]
+        color_ids = (norm * (len(palette) - 1)).astype(int)
+        node_colors = [palette[i] for i in color_ids]
     
-        # ---------------------------------------------------------
-        # Build node coordinate lists
-        # ---------------------------------------------------------
-        node_x, node_y = [], []
+        node_sizes = [8 + 80 * n for n in norm]
+    
+        # -------------------------------------------
+        # LAYOUT with anti-overlap tuning
+        # -------------------------------------------
+        pos = nx.spring_layout(
+            G,
+            k=0.9,                 # stronger repulsion
+            iterations=100,
+            seed=42,
+            weight="weight"
+        )
+    
+        # -------------------------------------------
+        # EDGE GEOMETRY
+        # -------------------------------------------
+        edge_x, edge_y = [], []
+        edge_widths = []
+        for u, v, d in G.edges(data=True):
+            x0, y0 = pos[u]
+            x1, y1 = pos[v]
+            edge_x += [x0, x1, None]
+            edge_y += [y0, y1, None]
+            edge_widths.append(1 + d["weight"] * 0.8)
+    
+        # -------------------------------------------
+        # NODES
+        # -------------------------------------------
+        node_x, node_y, node_text = [], [], []
         for n in G.nodes():
             x, y = pos[n]
             node_x.append(x)
             node_y.append(y)
+            node_text.append(f"{n}<br>Strength={strength[n]:.2f}")
     
-        # ---------------------------------------------------------
-        # Plotly figure
-        # ---------------------------------------------------------
+        # -------------------------------------------
+        # PLOTLY FIGURE
+        # -------------------------------------------
         fig_net = go.Figure()
     
-        # ---- Edges ----
+        # --- Edges ---
         fig_net.add_trace(go.Scatter(
-            x=edge_x, y=edge_y,
+            x=edge_x,
+            y=edge_y,
             mode="lines",
-            line=dict(width=2, color="dimgray"),
-            opacity=0.6,
-            hoverinfo="none"
+            line=dict(width=1.5, color="dimgray"),
+            hoverinfo="none",
+            opacity=0.55,
         ))
     
-        # ---- Nodes ----
+        # --- Nodes ---
         fig_net.add_trace(go.Scatter(
             x=node_x,
             y=node_y,
             mode="markers+text",
             text=list(G.nodes()),
             textposition="top center",
+            hovertext=node_text,
+            hoverinfo="text",
             marker=dict(
-                size=size,
+                size=node_sizes,
                 color=node_colors,
-                line=dict(color="darkred", width=1),       # red border on hover
-                opacity=0.95,
+                opacity=0.96,
+                line=dict(color="darkred", width=1.8),   # dark red outline on hover
             ),
-            hovertemplate=
-                "<b>%{text}</b><br>" +
-                "Degree Centrality: %{customdata:.3f}<extra></extra>",
-            customdata=cent_vals,
         ))
     
-        # Manual dragging enabled
+        # --- Layout: simulated drag (Plotly hack) ---
         fig_net.update_layout(
-            dragmode="pan",
-            height=800,
+            dragmode="pan",   # allows grab + move
+            height=820,
             margin=dict(l=10, r=10, b=10, t=10),
-            showlegend=False
+            hovermode="closest",
         )
     
         st.plotly_chart(fig_net, use_container_width=True)

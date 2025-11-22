@@ -328,10 +328,13 @@ if uploaded:
             for n in G.nodes()
         }
     
-        cent_vals = np.array(list(strength.values()), dtype=float)
-        ptp = cent_vals.ptp()
-    
-        if ptp == 0:
+        # --- convert always to numpy array ---
+        cent_vals = np.array([strength[n] for n in G.nodes()], dtype=float)
+        
+        # --- safe peak-to-peak ---
+        ptp = np.ptp(cent_vals)  # safe version
+        
+        if ptp <= 1e-12:         # avoid division by zero
             cent_norm = np.ones_like(cent_vals) * 0.5
         else:
             cent_norm = (cent_vals - cent_vals.min()) / ptp

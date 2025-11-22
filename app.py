@@ -377,7 +377,7 @@ if uploaded:
             "rgb(117,127,221)", "rgb(115,154,228)", "rgb(129,180,227)",
             "rgb(156,201,226)", "rgb(191,221,229)"
         ]
-        palette = dense_colors[2:]  # start from 3rd lighter color
+        palette = list(reversed(dense_colors[2:])) # start from 3rd lighter color
     
         # Map centrality → color
         idx = (cent_norm * (len(palette) - 1)).astype(int)
@@ -444,7 +444,17 @@ if uploaded:
                 size=node_sizes,
                 color=node_colors,
                 opacity=0.96,
-                line=dict(color="darkred", width=1.8),  # red border
+                line=dict(color="rgba(0,0,0,0)", width=1),  # nessun bordo di default
+            ),
+            selected=dict(
+                marker=dict(
+                    line=dict(color="darkred", width=3)     # bordo rosso SOLO su hover/click
+                )
+            ),
+            unselected=dict(
+                marker=dict(
+                    opacity=0.5
+                )
             ),
         ))
     

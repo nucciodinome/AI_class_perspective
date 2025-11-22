@@ -297,7 +297,7 @@ if uploaded:
         min_cent = st.slider("Minimum node strength (centrality filter)", 0.0, 1.0, 0.0, 0.01)
     
         # -------------------------------------------
-        # BUILD GRAPH
+        # BUILD BASE GRAPH
         # -------------------------------------------
         G = nx.Graph()
     
@@ -328,27 +328,48 @@ if uploaded:
             for n in G.nodes()
         }
     
-        # --- convert always to numpy array ---
-        cent_vals = np.array([strength[n] for n in G.nodes()], dtype=float)
-        
-        # --- safe peak-to-peak ---
-        ptp = np.ptp(cent_vals)  # safe version
-        
-        if ptp <= 1e-12:         # avoid division by zero
+        # Convert to NumPy
+        cent_vals = np.array(list(strength.values()), dtype=float)
+    
+        # Safe normalization
+        min_v = np.min(cent_vals)
+        max_v = np.max(cent_vals)
+        ptp = max_v - min_v
+    
+        if ptp <= 1e-12:
             cent_norm = np.ones_like(cent_vals) * 0.5
         else:
-            cent_norm = (cent_vals - cent_vals.min()) / ptp
+            cent_norm = (cent_vals - min_v) / ptp
     
-        # FILTER BY CENTRALITY
-        keep_nodes = [n for n, c in zip(G.nodes(), cent_norm) if c >= min_cent]
+        # -------------------------------------------
+        # FILTER NODES BY CENTRALITY SLIDER
+        # -------------------------------------------
+        keep_mask = cent_norm >= min_cent
+        keep_nodes = [node for node, keep in zip(G.nodes(), keep_mask) if keep]
+    
         G = G.subgraph(keep_nodes).copy()
     
         if len(G.nodes()) == 0:
             st.warning("No nodes remain after centrality filtering.")
             st.stop()
     
+        # Recompute strength AFTER filtering
+        strength = {
+            n: sum(d["weight"] for _, _, d in G.edges(n, data=True))
+            for n in G.nodes()
+        }
+    
+        cent_vals = np.array(list(strength.values()), dtype=float)
+        min_v = np.min(cent_vals)
+        max_v = np.max(cent_vals)
+        ptp = max_v - min_v
+        if ptp <= 1e-12:
+            cent_norm = np.ones_like(cent_vals) * 0.5
+        else:
+            cent_norm = (cent_vals - min_v) / ptp
+    
         # -------------------------------------------
-        # COLOR PALETTE DENSE (from 3rd color)
+        # COLOR PALETTE — DENSE (shifted by 2)
         # -------------------------------------------
         dense_colors = [
             "rgb(54,14,36)", "rgb(80,20,66)", "rgb(100,31,104)",
@@ -356,65 +377,61 @@ if uploaded:
             "rgb(117,127,221)", "rgb(115,154,228)", "rgb(129,180,227)",
             "rgb(156,201,226)", "rgb(191,221,229)"
         ]
-        palette = dense_colors[2:]
+        palette = dense_colors[2:]  # start from 3rd lighter color
     
-        cent_vals = np.array([strength[n] for n in G.nodes()])
-        norm = (cent_vals - cent_vals.min()) / (cent_vals.ptp() + 1e-9)
-    
-        color_ids = (norm * (len(palette) - 1)).astype(int)
-        node_colors = [palette[i] for i in color_ids]
-    
-        node_sizes = [8 + 80 * n for n in norm]
+        # Map centrality → color
+        idx = (cent_norm * (len(palette) - 1)).astype(int)
+        node_colors = [palette[i] for i in idx]
     
         # -------------------------------------------
-        # LAYOUT with anti-overlap tuning
+        # NODE SIZES
+        # -------------------------------------------
+        node_sizes = [8 + 80 * c for c in cent_norm]
+    
+        # -------------------------------------------
+        # LAYOUT (anti-overlap tuned spring)
         # -------------------------------------------
         pos = nx.spring_layout(
             G,
-            k=0.9,                 # stronger repulsion
+            k=0.9,
             iterations=100,
             seed=42,
             weight="weight"
         )
     
         # -------------------------------------------
-        # EDGE GEOMETRY
+        # EDGES
         # -------------------------------------------
         edge_x, edge_y = [], []
-        edge_widths = []
         for u, v, d in G.edges(data=True):
             x0, y0 = pos[u]
             x1, y1 = pos[v]
             edge_x += [x0, x1, None]
             edge_y += [y0, y1, None]
-            edge_widths.append(1 + d["weight"] * 0.8)
     
         # -------------------------------------------
         # NODES
         # -------------------------------------------
-        node_x, node_y, node_text = [], [], []
-        for n in G.nodes():
-            x, y = pos[n]
-            node_x.append(x)
-            node_y.append(y)
-            node_text.append(f"{n}<br>Strength={strength[n]:.2f}")
+        node_x = [pos[n][0] for n in G.nodes()]
+        node_y = [pos[n][1] for n in G.nodes()]
+        node_text = [f"{n}<br>Strength={strength[n]:.2f}" for n in G.nodes()]
     
         # -------------------------------------------
         # PLOTLY FIGURE
         # -------------------------------------------
         fig_net = go.Figure()
     
-        # --- Edges ---
+        # Edges
         fig_net.add_trace(go.Scatter(
             x=edge_x,
             y=edge_y,
             mode="lines",
-            line=dict(width=1.5, color="dimgray"),
+            line=dict(width=1.3, color="dimgray"),
             hoverinfo="none",
-            opacity=0.55,
+            opacity=0.55
         ))
     
-        # --- Nodes ---
+        # Nodes
         fig_net.add_trace(go.Scatter(
             x=node_x,
             y=node_y,
@@ -427,16 +444,15 @@ if uploaded:
                 size=node_sizes,
                 color=node_colors,
                 opacity=0.96,
-                line=dict(color="darkred", width=1.8),   # dark red outline on hover
+                line=dict(color="darkred", width=1.8),  # red border
             ),
         ))
     
-        # --- Layout: simulated drag (Plotly hack) ---
         fig_net.update_layout(
-            dragmode="pan",   # allows grab + move
-            height=820,
+            dragmode="pan",
+            height=830,
             margin=dict(l=10, r=10, b=10, t=10),
-            hovermode="closest",
+            hovermode="closest"
         )
     
         st.plotly_chart(fig_net, use_container_width=True)

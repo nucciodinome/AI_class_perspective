@@ -293,10 +293,12 @@ if uploaded:
     # ======================================================
     # TAB 5 — SENTIMENT (CORRECTED)
     # ======================================================
+
     with tabs[4]:
-    
+        
         st.header("Sentiment Analysis (VADER)")
     
+        # --- Compute sentiment scores ---
         sia = SentimentIntensityAnalyzer()
     
         df["sentiment_score"] = df[text_col].astype(str).apply(
@@ -309,31 +311,34 @@ if uploaded:
                 ("Negative" if s < -0.05 else "Neutral")
         )
     
-        # Unified color map
+        # --- Unified color map ---
         color_map = {
             "Positive": "#4DA6FF",   # soft blue
             "Negative": "#FF6666",   # soft red
             "Neutral":  "#BFBFBF"    # soft gray
         }
     
-        # ==========================================================
-        # 1) Overall Sentiment Distribution (CORRECTED)
-        # ==========================================================
-    
+        # =====================================================================
+        # 1) Overall Sentiment Distribution (CORRECTED & FIXED)
+        # =====================================================================
         st.subheader("Overall Sentiment Distribution")
     
         sent_counts = (
             df["sentiment_label"]
-            .value_counts(normalize=True, dropna=False)
+            .value_counts(normalize=True)
             .reset_index()
-            .rename(columns={"index": "sentiment_label", "sentiment_label": "percent"})
         )
     
-        # ---- FIX: ensure percent is numeric
+        # Correct column names
+        sent_counts.columns = ["sentiment_label", "percent"]
+    
+        # Ensure numeric
         sent_counts["percent"] = pd.to_numeric(sent_counts["percent"], errors="coerce").fillna(0)
     
+        # Display values in %
         sent_counts["percent_display"] = (sent_counts["percent"] * 100).round(1)
     
+        # Plot
         fig = px.bar(
             sent_counts,
             x="sentiment_label",
@@ -351,19 +356,18 @@ if uploaded:
         )
     
         st.plotly_chart(fig, use_container_width=True)
-        st.caption("Percentages are computed relative to the entire dataset (not per category).")
+        st.caption("Percentages are calculated relative to the entire dataset (not per category).")
     
-        # ==========================================================
+        # =====================================================================
         # 2) Sentiment by Region
-        # ==========================================================
-    
+        # =====================================================================
         st.subheader("Sentiment by Region")
     
         fig = px.histogram(
             df,
             x="sentiment_label",
             color=region_col,
-            barnorm="percent",
+            barnorm="percent",               # % within each region
             color_discrete_map=color_map
         )
     
@@ -374,17 +378,16 @@ if uploaded:
     
         st.plotly_chart(fig, use_container_width=True)
     
-        # ==========================================================
+        # =====================================================================
         # 3) Sentiment by Model
-        # ==========================================================
-    
+        # =====================================================================
         st.subheader("Sentiment by Model")
     
         fig = px.histogram(
             df,
             x="sentiment_label",
             color=model_col,
-            barnorm="percent",
+            barnorm="percent",               # % within each model
             color_discrete_map=color_map
         )
     

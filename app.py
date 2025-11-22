@@ -286,52 +286,166 @@ if uploaded:
     # ======================================================
     # TAB 4 — SEMANTIC NETWORK
     # ======================================================
+
     with tabs[3]:
-
-        st.header("Semantic Network (Improved)")
-
+    
+        st.header("Semantic Network (Advanced & Interactive)")
+    
+        # --------------------------------------------------
+        # Build graph from topic top words
+        # --------------------------------------------------
         G = nx.Graph()
+        topic_membership = {}
+    
         for t in range(n_topics):
             words, _ = top_words(t, 12)
+            for w in words:
+                topic_membership.setdefault(w, []).append(t)
+    
             for w1, w2 in combinations(words, 2):
                 if G.has_edge(w1, w2):
                     G[w1][w2]["weight"] += 1
                 else:
                     G.add_edge(w1, w2, weight=1)
-
-        centrality = nx.betweenness_centrality(G)
-        size = [8 + 80 * centrality[n] for n in G.nodes()]
-
-        pos = nx.spring_layout(G, k=0.7, iterations=50, seed=42)
-
-        edge_x, edge_y = [], []
-        for u, v in G.edges():
+    
+        # --------------------------------------------------
+        # Compute centralities
+        # --------------------------------------------------
+        betw = nx.betweenness_centrality(G, normalized=True)
+        deg = nx.degree_centrality(G)
+    
+        # --------------------------------------------------
+        # Slider to filter nodes by betweenness
+        # --------------------------------------------------
+        st.subheader("Filter Nodes by Centrality")
+    
+        min_b = min(betw.values()) if betw else 0
+        max_b = max(betw.values()) if betw else 0
+    
+        cutoff = st.slider(
+            "Minimum betweenness centrality (filter only):",
+            min_value=float(min_b),
+            max_value=float(max_b),
+            value=float(min_b),
+            step=(max_b - min_b) / 200 if max_b > min_b else 0.001,
+        )
+    
+        filtered_nodes = [n for n, c in betw.items() if c >= cutoff]
+    
+        if len(filtered_nodes) == 0:
+            st.warning("No nodes above this threshold.")
+            st.stop()
+    
+        Gf = G.subgraph(filtered_nodes).copy()
+    
+        # --------------------------------------------------
+        # Compute layout — STATIC layout, but nodes can be dragged
+        # --------------------------------------------------
+        pos = nx.spring_layout(Gf, k=0.7, iterations=60, seed=42)
+    
+        # --------------------------------------------------
+        # Prepare edges with width = co-occurrence weight
+        # --------------------------------------------------
+        edge_x, edge_y, edge_width = [], [], []
+        for u, v, data in Gf.edges(data=True):
             x0, y0 = pos[u]
             x1, y1 = pos[v]
             edge_x += [x0, x1, None]
             edge_y += [y0, y1, None]
-
-        node_x, node_y = [], []
-        for n in G.nodes():
+            edge_width.append(data["weight"])
+    
+        # Normalize edge widths (better visual)
+        max_w = max(edge_width) if edge_width else 1
+        norm_edge_width = [1 + 4 * (w / max_w) for w in edge_width]
+    
+        # --------------------------------------------------
+        # Prepare nodes
+        # --------------------------------------------------
+        node_x, node_y, node_sizes, node_colors, node_hover = [], [], [], [], []
+    
+        for n in Gf.nodes():
             x, y = pos[n]
             node_x.append(x)
             node_y.append(y)
-
+            node_sizes.append(15 + betw[n] * 120)  # Node size = betweenness
+            node_colors.append(deg[n])             # Node color = degree
+    
+            topics_str = ", ".join([f"T{t}" for t in topic_membership.get(n, [])])
+            node_hover.append(
+                f"<b>{n}</b><br>"
+                f"<b>Degree:</b> {deg[n]:.3f}<br>"
+                f"<b>Betweenness:</b> {betw[n]:.3f}<br>"
+                f"<b>Topics:</b> {topics_str}"
+            )
+    
+        # --------------------------------------------------
+        # Shift Dense palette (skip dark colors)
+        # --------------------------------------------------
+        dense_shifted = px.colors.sequential.Dense[2:]
+    
+        # --------------------------------------------------
+        # Build figure
+        # --------------------------------------------------
         fig_net = go.Figure()
+    
+        # ---- Edges (with dynamic width) ----
         fig_net.add_trace(go.Scatter(
-            x=edge_x, y=edge_y, mode="lines",
-            line=dict(width=1, color="dimgray")
+            x=edge_x,
+            y=edge_y,
+            mode="lines",
+            line=dict(
+                width=norm_edge_width,
+                color="rgba(140,140,140,0.6)"
+            ),
+            hoverinfo="none"
         ))
+    
+        # ---- Nodes ----
         fig_net.add_trace(go.Scatter(
-            x=node_x, y=node_y, mode="markers+text",
-            text=list(G.nodes()),
+            x=node_x,
+            y=node_y,
+            mode="markers+text",
+            text=list(Gf.nodes()),
             textposition="top center",
-            marker=dict(size=size, color=size, colorscale="dense")
+            hovertemplate="%{customdata}<extra></extra>",
+            customdata=node_hover,
+            marker=dict(
+                size=node_sizes,
+                color=node_colors,
+                colorscale=dense_shifted,
+                colorbar=dict(
+                    title="Degree<br>Centrality",
+                    thickness=12
+                ),
+                line=dict(color="darkred", width=1.5),  # Contorno rosso scuro
+            )
         ))
-
-        fig_net.update_layout(height=800,
-                              margin=dict(l=10, r=10, b=10, t=10))
+    
+        # --------------------------------------------------
+        # Enable dragging of nodes
+        # --------------------------------------------------
+        fig_net.update_layout(
+            dragmode="pan",   # allows node repositioning
+            height=850,
+            margin=dict(l=10, r=10, t=30, b=10),
+            hoverlabel=dict(
+                bgcolor="#2A2A2A",
+                bordercolor="#550000",   # bordo rosso scuro
+                font_size=13,
+                font_color="white",
+            ),
+            showlegend=False
+        )
+    
         st.plotly_chart(fig_net, use_container_width=True)
+    
+        st.caption("""
+            • **Node size** = betweenness centrality  
+            • **Node color** = degree centrality  
+            • **Edge thickness** = co-occurrence strength  
+            • **Hover tooltip** = centrality + topic membership  
+            • **Nodes can be dragged manually** in the visualization  
+        """)
 
     # ======================================================
     # TAB 5 — SENTIMENT (CORRECTED)

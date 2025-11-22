@@ -293,7 +293,7 @@ if uploaded:
     # ======================================================
     # TAB 5 — SENTIMENT (CORRECTED)
     # ======================================================
-        
+            
     with tabs[4]:
         
         st.header("Sentiment Analysis (VADER)")
@@ -306,12 +306,12 @@ if uploaded:
         )
     
         df["sentiment_label"] = df["sentiment_score"].apply(
-            lambda s:
-                "Positive" if s > 0.05 else
+            lambda s: 
+                "Positive" if s > 0.05 else 
                 ("Negative" if s < -0.05 else "Neutral")
         )
     
-        # Unified color map
+        # --- Unified color map ---
         color_map = {
             "Positive": "#4DA6FF",   # soft blue
             "Negative": "#FF6666",   # soft red
@@ -319,7 +319,7 @@ if uploaded:
         }
     
         # =====================================================================
-        # 1) Overall Sentiment Distribution
+        # 1) Overall Sentiment Distribution (CORRECTED & FIXED)
         # =====================================================================
         st.subheader("Overall Sentiment Distribution")
     
@@ -329,16 +329,16 @@ if uploaded:
             .reset_index()
         )
     
-        # Rename columns
+        # Correct column names
         sent_counts.columns = ["sentiment_label", "percent"]
     
         # Ensure numeric
         sent_counts["percent"] = pd.to_numeric(sent_counts["percent"], errors="coerce").fillna(0)
     
-        # Compute %
+        # Display values in %
         sent_counts["percent_display"] = (sent_counts["percent"] * 100).round(1)
     
-        # Bar chart
+        # Plot
         fig = px.bar(
             sent_counts,
             x="sentiment_label",
@@ -356,57 +356,49 @@ if uploaded:
         )
     
         st.plotly_chart(fig, use_container_width=True)
-        st.caption("Percentages refer to the entire dataset (not normalized within sentiment categories).")
+        st.caption("Percentages are calculated relative to the entire dataset (not per category).")
     
         # =====================================================================
-        # 2) Sentiment by Region — FACET VERSION (corrected)
+        # 2) Sentiment by Region  (FIXED — color = sentiment)
         # =====================================================================
-        st.subheader("Sentiment by Region (facet view)")
+        st.subheader("Sentiment by Region")
     
         fig = px.histogram(
             df,
-            x="sentiment_label",
-            facet_col=region_col,
-            color="sentiment_label",
-            barnorm="percent",                 # normalize within each region panel
+            x=region_col,                  # <-- region on x-axis
+            color="sentiment_label",       # <-- colors represent sentiment
+            barnorm="percent",             # <-- % within each region
             color_discrete_map=color_map
         )
     
         fig.update_layout(
-            xaxis_title="Sentiment",
-            yaxis_title="Percent within region",
-            showlegend=True,
+            xaxis_title="Region",
+            yaxis_title="Percent sentiment within region",
+            legend_title="Sentiment"
         )
     
-        fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[1]))
-    
         st.plotly_chart(fig, use_container_width=True)
-        st.caption("Each panel shows the sentiment distribution normalized *within that region*.")
     
         # =====================================================================
-        # 3) Sentiment by Model — FACET VERSION (corrected)
+        # 3) Sentiment by Model (FIXED — color = sentiment)
         # =====================================================================
-        st.subheader("Sentiment by Model (facet view)")
+        st.subheader("Sentiment by Model")
     
         fig = px.histogram(
             df,
-            x="sentiment_label",
-            facet_col=model_col,
-            color="sentiment_label",
-            barnorm="percent",                 # normalize within each model panel
+            x=model_col,                   # <-- model on x-axis
+            color="sentiment_label",       # <-- colors represent sentiment
+            barnorm="percent",             # <-- % within each model
             color_discrete_map=color_map
         )
     
         fig.update_layout(
-            xaxis_title="Sentiment",
-            yaxis_title="Percent within model",
-            showlegend=True,
+            xaxis_title="Model",
+            yaxis_title="Percent sentiment within model",
+            legend_title="Sentiment"
         )
     
-        fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[1]))
-    
         st.plotly_chart(fig, use_container_width=True)
-        st.caption("Each panel shows the sentiment distribution normalized *within that model*.") 
     # ======================================================
     # TAB 6 — WORDCLOUDS
     # ======================================================

@@ -24,7 +24,7 @@ nltk.download("vader_lexicon", quiet=True)
 # STREAMLIT CONFIG
 # ------------------------------------------------------
 st.set_page_config(page_title="Ultra-Advanced Text Analysis Suite", layout="wide")
-st.title("📊 Ultra-Advanced Text Analysis Suite")
+st.title("📊 Advanced Text Analysis Suite for JU Class")
 
 # ------------------------------------------------------
 # UPLOAD FILE

@@ -288,46 +288,103 @@ if uploaded:
                               margin=dict(l=10, r=10, b=10, t=10))
         st.plotly_chart(fig_net, use_container_width=True)
 
-    # ------------------------------------------------------------
-    # TAB 5 — SENTIMENT ANALYSIS
-    # ------------------------------------------------------------
-    with tabs[4]:
-        st.header("Sentiment Analysis (VADER)")
+# ------------------------------------------------------------
+# TAB 5 — SENTIMENT ANALYSIS (CORRECTED)
+# ------------------------------------------------------------
+with tabs[4]:
+    st.header("Sentiment Analysis (VADER)")
 
-        sia = SentimentIntensityAnalyzer()
-        df["sentiment_score"] = df[text_col].apply(lambda x: sia.polarity_scores(x)["compound"])
-        df["sentiment_label"] = df["sentiment_score"].apply(
-            lambda s: "Positive" if s>0.05 else ("Negative" if s<-0.05 else "Neutral")
-        )
+    # --- Sentiment scores ---
+    sia = SentimentIntensityAnalyzer()
+    df["sentiment_score"] = df[text_col].apply(lambda x: sia.polarity_scores(x)["compound"])
+    df["sentiment_label"] = df["sentiment_score"].apply(
+        lambda s: "Positive" if s > 0.05 else ("Negative" if s < -0.05 else "Neutral")
+    )
 
-        color_map = {
-            "Positive": "#4DA6FF",   # soft blue
-            "Negative": "#FF6666",   # soft red
-            "Neutral":  "#BFBFBF"
-        }
+    # --- UNIFIED COLOR MAP ---
+    color_map = {
+        "Positive": "#4DA6FF",   # soft blue
+        "Negative": "#FF6666",   # soft red
+        "Neutral": "#BFBFBF"
+    }
 
-        st.subheader("Sentiment Distribution")
-        fig = px.histogram(
-            df, x="sentiment_label",
-            color="sentiment_label",
-            color_discrete_map=color_map,
-            barnorm="percent"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    # ==========================================================
+    # 1) Overall Sentiment Distribution (CORRECTED)
+    # ==========================================================
+    st.subheader("Overall Sentiment Distribution")
 
-        st.subheader("Sentiment by Region")
-        fig = px.histogram(
-            df, x="sentiment_label", color=color_map,
-            color_discrete_map=color_map, barnorm="percent"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    sent_counts = (
+        df["sentiment_label"]
+        .value_counts(normalize=True)
+        .reset_index()
+        .rename(columns={"index": "sentiment_label", "sentiment_label": "percent"})
+    )
 
-        st.subheader("Sentiment by Model")
-        fig = px.histogram(
-            df, x="sentiment_label", color=color_map,
-            color_discrete_map=color_map, barnorm="percent"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    sent_counts["percent_display"] = (sent_counts["percent"] * 100).round(1)
+
+    fig = px.bar(
+        sent_counts,
+        x="sentiment_label",
+        y="percent",
+        color="sentiment_label",
+        color_discrete_map=color_map,
+        text="percent_display"
+    )
+
+    fig.update_traces(texttemplate="%{text}%", textposition="outside")
+    fig.update_layout(
+        yaxis=dict(ticksuffix="%"),
+        xaxis_title="Sentiment category",
+        yaxis_title="Percentage of texts",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.caption("Percentages are calculated relative to the entire dataset (not per category).")
+
+    # ==========================================================
+    # 2) Sentiment by Region
+    # ==========================================================
+    st.subheader("Sentiment by Region")
+
+    fig = px.histogram(
+        df,
+        x="sentiment_label",
+        color=region_col,
+        barnorm="percent",               # % within each region
+        color_discrete_map=color_map     # << SAME COLORS AS ABOVE
+    )
+
+    fig.update_layout(
+        xaxis_title="Sentiment",
+        yaxis_title="Percent within region",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.caption("Each bar shows the sentiment distribution *within each region* (percent-normalized).")
+
+    # ==========================================================
+    # 3) Sentiment by Model
+    # ==========================================================
+    st.subheader("Sentiment by Model")
+
+    fig = px.histogram(
+        df,
+        x="sentiment_label",
+        color=model_col,
+        barnorm="percent",               # % within each model type
+        color_discrete_map=color_map     # << SAME COLORS
+    )
+
+    fig.update_layout(
+        xaxis_title="Sentiment",
+        yaxis_title="Percent within model",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.caption("Each bar shows the sentiment distribution *within each model* (percent-normalized).")
 
     # ------------------------------------------------------------
     # TAB 6 — WORDCLOUDS

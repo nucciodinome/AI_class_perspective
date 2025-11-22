@@ -289,164 +289,151 @@ if uploaded:
 
     with tabs[3]:
     
-        st.header("Semantic Network (Advanced & Interactive)")
+        st.header("Semantic Network (Advanced)")
     
-        # --------------------------------------------------
-        # Build graph from topic top words
-        # --------------------------------------------------
+        # -------------------------------------------
+        # 1) COSTRUZIONE GRAFO DI CO-OCCORRENZA
+        # -------------------------------------------
         G = nx.Graph()
-        topic_membership = {}
     
         for t in range(n_topics):
             words, _ = top_words(t, 12)
-            for w in words:
-                topic_membership.setdefault(w, []).append(t)
-    
             for w1, w2 in combinations(words, 2):
                 if G.has_edge(w1, w2):
                     G[w1][w2]["weight"] += 1
                 else:
                     G.add_edge(w1, w2, weight=1)
     
-        # --------------------------------------------------
-        # Compute centralities
-        # --------------------------------------------------
-        betw = nx.betweenness_centrality(G, normalized=True)
-        deg = nx.degree_centrality(G)
+        # -------------------------------------------
+        # 2) NODE STRENGTH (ASSOCIATIVE STRENGTH)
+        # -------------------------------------------
+        strength = {
+            n: sum(G[n][nbr]["weight"] for nbr in G[n])
+            for n in G.nodes()
+        }
     
-        # --------------------------------------------------
-        # Slider to filter nodes by betweenness
-        # --------------------------------------------------
-        st.subheader("Filter Nodes by Centrality")
+        node_strengths = np.array([strength[n] for n in G.nodes()])
     
-        min_b = min(betw.values()) if betw else 0
-        max_b = max(betw.values()) if betw else 0
     
-        cutoff = st.slider(
-            "Minimum betweenness centrality (filter only):",
-            min_value=float(min_b),
-            max_value=float(max_b),
-            value=float(min_b),
-            step=(max_b - min_b) / 200 if max_b > min_b else 0.001,
+        # -------------------------------------------
+        # 3) FILTRO INTERATTIVO SU STRENGTH
+        # -------------------------------------------
+        st.subheader("Filter nodes by associative strength")
+    
+        min_s, max_s = float(node_strengths.min()), float(node_strengths.max())
+    
+        strength_range = st.slider(
+            "Minimum node associative strength",
+            min_value=min_s,
+            max_value=max_s,
+            value=min_s,
+            step=0.1
         )
     
-        filtered_nodes = [n for n, c in betw.items() if c >= cutoff]
+        # --> Applica filtro
+        filtered_nodes = [n for n in G.nodes() if strength[n] >= strength_range]
+        Hnet = G.subgraph(filtered_nodes).copy()
     
-        if len(filtered_nodes) == 0:
-            st.warning("No nodes above this threshold.")
-            st.stop()
+        # Se il filtro rimuove troppo → fallback
+        if len(Hnet.nodes()) < 3:
+            st.warning("Filter too strong — showing full network instead.")
+            Hnet = G.copy()
     
-        Gf = G.subgraph(filtered_nodes).copy()
     
-        # --------------------------------------------------
-        # Compute layout — STATIC layout, but nodes can be dragged
-        # --------------------------------------------------
-        pos = nx.spring_layout(Gf, k=0.7, iterations=60, seed=42)
+        # -------------------------------------------
+        # 4) DENSE COLOR SCALE (corretta)
+        # -------------------------------------------
+        dense_list = [
+            "rgb(255,255,217)", "rgb(237,248,177)", "rgb(199,233,180)",
+            "rgb(127,205,187)", "rgb(65,182,196)", "rgb(29,145,192)",
+            "rgb(34,94,168)", "rgb(37,52,148)", "rgb(8,29,88)"
+        ]
+        dense_shifted = dense_list[2:]   # salta i due più chiari
     
-        # --------------------------------------------------
-        # Prepare edges with width = co-occurrence weight
-        # --------------------------------------------------
-        edge_x, edge_y, edge_width = [], [], []
-        for u, v, data in Gf.edges(data=True):
+    
+        # -------------------------------------------
+        # 5) NODE SIZES + COLORS
+        # -------------------------------------------
+        node_strengths_f = np.array([strength[n] for n in Hnet.nodes()])
+        node_sizes = 10 + node_strengths_f * 4
+        node_colors = node_strengths_f
+    
+    
+        # -------------------------------------------
+        # 6) EDGE WIDTH = CO-OCCURRENCE STRENGTH
+        # -------------------------------------------
+        edge_widths = [
+            max(1, Hnet[u][v]["weight"] * 1.2)
+            for u, v in Hnet.edges()
+        ]
+    
+    
+        # -------------------------------------------
+        # 7) LAYOUT (spring)
+        # -------------------------------------------
+        pos = nx.spring_layout(Hnet, k=0.75, iterations=80, seed=42)
+    
+        edge_x, edge_y = [], []
+        for (u, v), w in zip(Hnet.edges(), edge_widths):
             x0, y0 = pos[u]
             x1, y1 = pos[v]
             edge_x += [x0, x1, None]
             edge_y += [y0, y1, None]
-            edge_width.append(data["weight"])
     
-        # Normalize edge widths (better visual)
-        max_w = max(edge_width) if edge_width else 1
-        norm_edge_width = [1 + 4 * (w / max_w) for w in edge_width]
+        node_x = [pos[n][0] for n in Hnet.nodes()]
+        node_y = [pos[n][1] for n in Hnet.nodes()]
     
-        # --------------------------------------------------
-        # Prepare nodes
-        # --------------------------------------------------
-        node_x, node_y, node_sizes, node_colors, node_hover = [], [], [], [], []
     
-        for n in Gf.nodes():
-            x, y = pos[n]
-            node_x.append(x)
-            node_y.append(y)
-            node_sizes.append(15 + betw[n] * 120)  # Node size = betweenness
-            node_colors.append(deg[n])             # Node color = degree
-    
-            topics_str = ", ".join([f"T{t}" for t in topic_membership.get(n, [])])
-            node_hover.append(
-                f"<b>{n}</b><br>"
-                f"<b>Degree:</b> {deg[n]:.3f}<br>"
-                f"<b>Betweenness:</b> {betw[n]:.3f}<br>"
-                f"<b>Topics:</b> {topics_str}"
-            )
-    
-        # --------------------------------------------------
-        # Shift Dense palette (skip dark colors)
-        # --------------------------------------------------
-        dense_shifted = px.colors.sequential.Dense[2:]
-    
-        # --------------------------------------------------
-        # Build figure
-        # --------------------------------------------------
+        # -------------------------------------------
+        # 8) FIGURA INTERATTIVA
+        # -------------------------------------------
         fig_net = go.Figure()
     
-        # ---- Edges (with dynamic width) ----
+        # Edges
         fig_net.add_trace(go.Scatter(
-            x=edge_x,
-            y=edge_y,
+            x=edge_x, y=edge_y,
             mode="lines",
-            line=dict(
-                width=norm_edge_width,
-                color="rgba(140,140,140,0.6)"
-            ),
+            line=dict(width=0.5, color="gray"),
             hoverinfo="none"
         ))
     
-        # ---- Nodes ----
+        # Nodes
         fig_net.add_trace(go.Scatter(
-            x=node_x,
-            y=node_y,
+            x=node_x, y=node_y,
             mode="markers+text",
-            text=list(Gf.nodes()),
+            text=list(Hnet.nodes()),
             textposition="top center",
-            hovertemplate="%{customdata}<extra></extra>",
-            customdata=node_hover,
+            hovertemplate=(
+                "<b>%{text}</b><br>" +
+                "Associative strength: %{marker.color:.2f}<extra></extra>"
+            ),
             marker=dict(
                 size=node_sizes,
                 color=node_colors,
                 colorscale=dense_shifted,
-                colorbar=dict(
-                    title="Degree<br>Centrality",
-                    thickness=12
-                ),
-                line=dict(color="darkred", width=1.5),  # Contorno rosso scuro
+                showscale=True,
+                line=dict(color="darkred", width=1),  # ← bordo rosso scuro
+                opacity=0.95
             )
         ))
     
-        # --------------------------------------------------
-        # Enable dragging of nodes
-        # --------------------------------------------------
         fig_net.update_layout(
-            dragmode="pan",   # allows node repositioning
-            height=850,
-            margin=dict(l=10, r=10, t=30, b=10),
-            hoverlabel=dict(
-                bgcolor="#2A2A2A",
-                bordercolor="#550000",   # bordo rosso scuro
-                font_size=13,
-                font_color="white",
-            ),
-            showlegend=False
+            height=840,
+            margin=dict(l=0, r=0, t=10, b=10),
+    
+            # — Enable manual dragging
+            dragmode="pan",
         )
     
         st.plotly_chart(fig_net, use_container_width=True)
     
         st.caption("""
-            • **Node size** = betweenness centrality  
-            • **Node color** = degree centrality  
-            • **Edge thickness** = co-occurrence strength  
-            • **Hover tooltip** = centrality + topic membership  
-            • **Nodes can be dragged manually** in the visualization  
+        🔶 **Node size = associative strength**  
+        🔶 **Node color = associative strength (Dense palette)**  
+        🔶 **Edge width = co-occurrence weight**  
+        🔶 **Drag nodes manually**  
+        🔶 **Filter nodes by minimum associative strength**  
         """)
-
     # ======================================================
     # TAB 5 — SENTIMENT (CORRECTED)
     # ======================================================
